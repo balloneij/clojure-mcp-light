@@ -75,6 +75,25 @@
         filename))))
 
 ;; ============================================================================
+;; JAR Entry Inspection
+;; ============================================================================
+
+(defn jar-contains-entry?
+  "Check if a JAR contains a specific entry.
+
+  Parameters:
+  - jar-path: Path to the JAR file
+  - entry-path: Path within the JAR (e.g., \"org/example/Foo.java\")
+
+  Returns true if entry exists, false otherwise."
+  [jar-path entry-path]
+  (when (and jar-path entry-path (fs/exists? jar-path))
+    (try
+      (with-open [jar (JarFile. (str jar-path))]
+        (some? (.getEntry jar entry-path)))
+      (catch Exception _ false))))
+
+;; ============================================================================
 ;; JAR Entry Extraction
 ;; ============================================================================
 

@@ -230,8 +230,8 @@
   For library classes: Queries nREPL to find JAR, then looks for -sources.jar
 
   Returns map with:
-  - :source-type - :jdk-src-zip, :sources-jar, or :needs-decompile
-  - :source-path - Path to source archive (src.zip or sources.jar)
+  - :source-type - :jdk-src-zip, :sources-jar, :main-jar-source, or :needs-decompile
+  - :source-path - Path to source archive (src.zip, sources.jar, or main JAR)
   - :entry-paths - Vector of paths to try within the archive (JDK 9+ has module prefixes)
   - :class-jar - Original class JAR (for decompilation fallback)
   - :error - Error message if source cannot be located"
@@ -255,12 +255,25 @@
       (let [location (resolve-class-location conn class-name)]
         (if (= "found" (:status location))
           (let [class-jar (extract-jar-from-resource-url (:resource-url location))
-                sources-jar (find-sources-jar class-jar)]
-            (if sources-jar
+                sources-jar (find-sources-jar class-jar)
+                source-path (class-to-source-path class-name)]
+            (cond
+              ;; First choice: -sources.jar
+              sources-jar
               {:source-type :sources-jar
                :source-path sources-jar
                :entry-paths entry-paths
                :class-jar class-jar}
+
+              ;; Second choice: .java in main JAR (some libraries bundle sources)
+              (jar/jar-contains-entry? class-jar source-path)
+              {:source-type :main-jar-source
+               :source-path class-jar
+               :entry-paths entry-paths
+               :class-jar class-jar}
+
+              ;; Last resort: decompile
+              :else
               {:source-type :needs-decompile
                :class-jar class-jar
                :class-path (class-to-class-path class-name)
@@ -362,6 +375,30 @@
          :error (str "Failed to extract " (first entry-paths)
                      " from " (:source-path source-info))}))
 
+    :main-jar-source
+    ;; Some libraries bundle .java sources directly in the main JAR
+    (let [artifact (jar/infer-artifact-name (:source-path source-info))
+          dest-base (tmp/sources-dir ctx)
+          dest-dir (str (fs/path dest-base artifact))
+          entry-paths (:entry-paths source-info)
+          result (try-extract-from-archive (:source-path source-info)
+                                           entry-paths
+                                           dest-dir
+                                           jar/extract-jar-entry)]
+      (if result
+        {:status "found"
+         :type "java-class"
+         :class class-name
+         :file (:extracted result)
+         :line 1
+         :extraction-status (if (:cached? result) :cached :extracted)
+         :bundled-source? true}
+        {:status "error"
+         :type "java-class"
+         :class class-name
+         :error (str "Failed to extract " (first entry-paths)
+                     " from " (:source-path source-info))}))
+
     :needs-decompile
     (let [class-jar (:class-jar source-info)
           class-path (:class-path source-info)
@@ -379,7 +416,8 @@
         {:status "error"
          :type "java-class"
          :class class-name
-         :error (:error result)
+         :error (str (:error result)
+                     " Tip: Try --extract-dep " class-jar " to check for bundled sources.")
          :class-jar class-jar}))
 
     :error
