@@ -145,6 +145,27 @@
   [ctx]
   (str (fs/create-dirs (fs/path (session-root ctx) "nrepl"))))
 
+(defn sources-dir
+  "Get the sources cache directory for this session/project context.
+  Creates directory if it doesn't exist.
+
+  Used by source navigation to cache extracted source files from JARs."
+  [ctx]
+  (str (fs/create-dirs (fs/path (session-root ctx) "sources"))))
+
+(defn source-cache-path
+  "Get cache path for an extracted source file.
+
+  Parameters:
+  - ctx: Session context
+  - artifact-name: e.g., \"clojure-1.11.1\" or \"ring-core-1.9.6\"
+  - relative-path: e.g., \"clojure/core.clj\"
+
+  Returns absolute path like:
+  {sources-dir}/{artifact-name}/{relative-path}"
+  [ctx artifact-name relative-path]
+  (str (fs/path (sources-dir ctx) artifact-name relative-path)))
+
 ;; ============================================================================
 ;; Specific File Paths
 ;; ============================================================================

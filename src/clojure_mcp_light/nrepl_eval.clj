@@ -3,10 +3,12 @@
 (ns clojure-mcp-light.nrepl-eval
   "nREPL client implementation with automatic delimiter repair and timeout handling"
   (:require [babashka.fs :as fs]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure-mcp-light.delimiter-repair :refer [fix-delimiters]]
             [clojure-mcp-light.nrepl-client :as nc]
+            [clojure-mcp-light.source-nav :as source-nav]
             [clojure-mcp-light.tmp :as tmp]))
 
 ;; ============================================================================
@@ -378,6 +380,8 @@
    ["-r" "--reset-session" "Reset the persistent nREPL session"]
    ["-c" "--connected-ports" "List all active nREPL connections"]
    ["-d" "--discover-ports" "Discover nREPL servers in current directory"]
+   ["-f" "--find-source SYMBOL" "Find and extract source for symbol (e.g., clojure.core/map)"]
+   ["-e" "--extract-dep JAR" "Extract entire JAR to source cache directory"]
    ["-h" "--help" "Show this help message"]])
 
 (defn has-stdin-data?
@@ -404,6 +408,8 @@
              ""
              "Usage: clj-nrepl-eval --port PORT CODE"
              "       clj-nrepl-eval --port PORT --reset-session [CODE]"
+             "       clj-nrepl-eval --port PORT --find-source SYMBOL"
+             "       clj-nrepl-eval --extract-dep JAR_PATH"
              "       clj-nrepl-eval --connected-ports"
              "       clj-nrepl-eval --discover-ports"
              "       echo CODE | clj-nrepl-eval --port PORT"
@@ -425,6 +431,13 @@
              "  1. Use --discover-ports to find nREPL servers in current directory"
              "  2. Use --connected-ports to see previously connected servers"
              "  3. Use --port to connect to a specific server"
+             ""
+             "Source Navigation:"
+             "  --find-source resolves a symbol via nREPL, extracts source from JAR,"
+             "  and returns JSON with file path and line number. Use for symbol lookups."
+             ""
+             "  --extract-dep extracts an entire JAR to a temporary directory for exploration."
+             "  No nREPL connection needed. Use to explore a library's source code."
              ""
              "Examples:"
              "  # Discover nREPL servers in current directory"
@@ -452,7 +465,15 @@
              ""
              "  # Reset session"
              "  clj-nrepl-eval -p 7888 --reset-session"
-             "  clj-nrepl-eval -p 7888 --reset-session \"(def x 1)\""]))
+             "  clj-nrepl-eval -p 7888 --reset-session \"(def x 1)\""
+             ""
+             "  # Find source for a symbol (returns JSON with file path)"
+             "  clj-nrepl-eval -p 7888 --find-source clojure.core/map"
+             "  clj-nrepl-eval -p 7888 -f ring.util.response/redirect"
+             ""
+             "  # Extract entire dependency JAR to temp directory"
+             "  clj-nrepl-eval --extract-dep ~/.m2/repository/ring/ring-core/1.9.6/ring-core-1.9.6.jar"
+             "  clj-nrepl-eval -e path/to/library.jar"]))
 
 (defn error-msg [errors]
   (str "Error parsing command line:\n\n"
@@ -553,6 +574,38 @@
         (println "Use --connected-ports to see available connections"))
       (System/exit 1))))
 
+(defn handle-find-source
+  "Handler for --find-source flag.
+   Finds and extracts source for a symbol, printing JSON result."
+  [options]
+  (if-let [port (:port options)]
+    (let [symbol (:find-source options)
+          host (get-host options)
+          timeout-ms (or (:timeout options) 5000)]
+      (nc/with-socket host (nc/coerce-long port) timeout-ms
+        (fn [socket out in]
+          (let [conn (nc/make-connection socket out in host port)
+                session-data (ensure-session conn)
+                session-id (:session-id session-data)
+                conn-with-session (assoc conn :session-id session-id)
+                ctx {}
+                result (source-nav/find-source conn-with-session symbol ctx)]
+            (println (json/generate-string result {:pretty true}))))))
+    (do
+      (binding [*out* *err*]
+        (println "Error: --port is required for --find-source")
+        (println "Use --connected-ports to see available connections"))
+      (System/exit 1))))
+
+(defn handle-extract-dep
+  "Handler for --extract-dep flag.
+   Extracts entire JAR to source cache directory, printing JSON result."
+  [options]
+  (let [jar-path (:extract-dep options)
+        ctx {}
+        result (source-nav/extract-dep jar-path ctx)]
+    (println (json/generate-string result {:pretty true}))))
+
 (defn -main [& args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
     (cond
@@ -578,6 +631,14 @@
       ;; Handle --reset-session flag
       (:reset-session options)
       (handle-reset-session options arguments)
+
+      ;; Handle --find-source flag
+      (:find-source options)
+      (handle-find-source options)
+
+      ;; Handle --extract-dep flag
+      (:extract-dep options)
+      (handle-extract-dep options)
 
       :else
       (let [code (get-code arguments)]
