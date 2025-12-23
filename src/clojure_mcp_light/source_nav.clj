@@ -63,10 +63,15 @@
 
 (def ^:private get-var-source-info-code
   "Clojure code to evaluate on the REPL to get var source info.
-  Takes a qualified symbol and returns a map with metadata."
+  Takes a qualified symbol and returns a map with metadata.
+  Auto-requires the namespace if not already loaded."
   "(fn [qualified-sym-str]
      (try
-       (let [sym (symbol qualified-sym-str)]
+       (let [sym (symbol qualified-sym-str)
+             ns-sym (symbol (namespace sym))]
+         ;; Auto-require the namespace if not loaded
+         (when (and ns-sym (not (find-ns ns-sym)))
+           (require ns-sym))
          (if-let [v (resolve sym)]
            (let [m (meta v)
                  file (:file m)
