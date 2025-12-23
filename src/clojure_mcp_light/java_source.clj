@@ -4,10 +4,11 @@
   Supports:
   - JDK classes (java.*, javax.*, sun.*) from src.zip
   - Library classes from -sources.jar files
-  - Returns :needs-decompile when no source is available (Phase 3)"
+  - Decompilation via CFR when no source JAR is available"
   (:require [babashka.fs :as fs]
             [clojure.edn :as edn]
             [clojure.string :as str]
+            [clojure-mcp-light.decompiler :as decompiler]
             [clojure-mcp-light.jar-extract :as jar]
             [clojure-mcp-light.nrepl-client :as nc]
             [clojure-mcp-light.tmp :as tmp]))
@@ -362,11 +363,24 @@
                      " from " (:source-path source-info))}))
 
     :needs-decompile
-    {:status "error"
-     :type "java-class"
-     :class class-name
-     :error "No source JAR available. Decompilation not yet implemented (Phase 3)."
-     :class-jar (:class-jar source-info)}
+    (let [class-jar (:class-jar source-info)
+          class-path (:class-path source-info)
+          dest-dir (str (fs/path (tmp/sources-dir ctx)
+                                 (str (jar/infer-artifact-name class-jar) "-decompiled")))
+          result (decompiler/decompile-class-to-cache class-jar class-path class-name dest-dir)]
+      (if (= :success (:status result))
+        {:status "found"
+         :type "java-class"
+         :class class-name
+         :file (:file result)
+         :line 1
+         :extraction-status (if (:cached? result) :cached :decompiled)
+         :decompiled? true}
+        {:status "error"
+         :type "java-class"
+         :class class-name
+         :error (:error result)
+         :class-jar class-jar}))
 
     :error
     {:status "error"
