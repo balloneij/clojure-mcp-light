@@ -14,6 +14,7 @@ Use this skill when you need to:
 - Debug code by evaluating expressions
 - Require or load namespaces for testing
 - Validate that code changes work before committing
+- Read source code from third-party libraries or Java classes
 
 ## How It Works
 
@@ -140,12 +141,14 @@ clj-nrepl-eval -p <PORT> --reset-session "(def x 1)"
 
 ## Available Options
 
-- `-p, --port PORT` - nREPL port (required)
+- `-p, --port PORT` - nREPL port (required for eval)
 - `-H, --host HOST` - nREPL host (default: 127.0.0.1)
 - `-t, --timeout MILLISECONDS` - Timeout (default: 120000 = 2 minutes)
 - `-r, --reset-session` - Reset the persistent nREPL session
 - `-c, --connected-ports` - List previously connected nREPL sessions
 - `-d, --discover-ports` - Discover nREPL servers in current directory
+- `--find-source SYMBOL` - Locate source for a var or Java class
+- `--extract-dep JAR` - Extract JAR contents for browsing
 - `-h, --help` - Show help message
 
 ## Important Notes
@@ -171,3 +174,37 @@ clj-nrepl-eval -p <PORT> --reset-session "(def x 1)"
    clj-nrepl-eval -p <PORT> "(ns/my-fn ...)"
    ```
 5. Iterate: Make changes, re-require with `:reload`, test again
+
+## Source Navigation
+
+When REPL introspection (`doc`, `source`, `meta`) isn't enough, use source navigation to read full source files.
+
+**When to use REPL first:**
+```bash
+# Quick signature/docstring - instant, no extraction needed
+clj-nrepl-eval -p <PORT> "(doc clojure.string/split)"
+clj-nrepl-eval -p <PORT> "(meta (resolve 'clojure.string/split))"
+```
+
+**When to use `--find-source`:**
+- Function is complex and you need surrounding context
+- Need to trace through related functions in the same file
+- Java class implementation details
+- Debugging weird behavior in library code
+
+```bash
+# Returns JSON with local file path you can read
+clj-nrepl-eval -p <PORT> --find-source clojure.string/split
+clj-nrepl-eval -p <PORT> --find-source java.util.HashMap
+```
+
+**When to use `--extract-dep`:**
+- Exploring an entire library's structure
+- Grepping across library source
+
+```bash
+# Extract JAR contents to temp directory
+clj-nrepl-eval -p <PORT> --extract-dep ~/.m2/repository/ring/ring-core/1.9.6/ring-core-1.9.6.jar
+```
+
+For Java classes without source JARs, decompilation via CFR happens automatically if CFR is installed.

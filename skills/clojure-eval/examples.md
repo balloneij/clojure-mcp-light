@@ -79,3 +79,31 @@ clj-nrepl-eval -p 7888 <<'EOF'
 (clojure.test/run-tests 'my.project.core-test)
 EOF
 ```
+
+## Source Navigation
+
+### Start with REPL Introspection
+
+```bash
+# Quick checks - no file extraction needed
+clj-nrepl-eval -p 7888 "(doc ring.util.response/redirect)"
+clj-nrepl-eval -p 7888 "(clojure.repl/source ring.util.response/redirect)"
+clj-nrepl-eval -p 7888 "(meta (resolve 'ring.util.response/redirect))"
+```
+
+### Read Full Source When Needed
+
+```bash
+# When you need the full file with context
+clj-nrepl-eval -p 7888 --find-source ring.util.response/redirect
+
+# Java classes work too
+clj-nrepl-eval -p 7888 --find-source java.util.concurrent.ConcurrentHashMap
+```
+
+### Explore a Library
+
+```bash
+# Extract entire JAR for grepping
+clj-nrepl-eval -p 7888 --extract-dep ~/.m2/repository/metosin/reitit-core/0.7.0/reitit-core-0.7.0.jar
+```

@@ -41,9 +41,17 @@ EOF
 
 **hook.clj** - Intercepts Write/Edit operations to auto-fix delimiter errors. For Write: fixes before writing. For Edit: creates backup, fixes after edit, restores if unfixable. Optional `--cljfmt` flag for formatting. Supports `--stats` for tracking delimiter events.
 
-**nrepl_eval.clj** - nREPL client with timeout handling, persistent sessions, and delimiter repair. Use `--connected-ports` to discover connections, `--port` to specify target.
+**nrepl_eval.clj** - nREPL client with timeout handling, persistent sessions, and delimiter repair. Use `--connected-ports` to discover connections, `--port` to specify target. Also provides source navigation with `--find-source SYMBOL` and `--extract-dep JAR`.
 
 **tmp.clj** - Session-scoped temp file management with automatic cleanup via SessionEnd hook.
+
+**source_nav.clj** - Source navigation for Clojure and Java. Resolves symbols to source files, extracting from JARs to temp cache.
+
+**java_source.clj** - Java source handling. Extracts from JDK src.zip (supports JDK 9+ module structure) or library -sources.jar files. Falls back to CFR decompilation.
+
+**decompiler.clj** - CFR decompiler integration. Decompiles .class files when no source JAR is available.
+
+**jar_extract.clj** - JAR/ZIP extraction utilities. Parses jar:file: URIs, extracts entries to cache.
 
 ## Key Details
 
@@ -59,6 +67,7 @@ EOF
 External tools:
 - **parinfer-rust** (optional, recommended) - Faster delimiter repair when on PATH; falls back to parinferish if not available
 - **cljfmt** (optional) - For `--cljfmt` flag
+- **CFR** (optional) - For decompiling Java classes without sources. Download from https://github.com/leibnitz27/cfr/releases and either set `CFR_JAR` env var or place `cfr` wrapper script on PATH
 - **babashka** - For running scripts
 - **bbin** - For installation
 
